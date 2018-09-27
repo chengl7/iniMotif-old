@@ -1,0 +1,59 @@
+span.red {color: red;}
+span.green {color:green;}
+span.blue {color:blue;}
+span.highlight { color: red; }
+span.normal {color: black; }
+span.link {
+  a:link {color: rgb(0,0,255)};     /* unvisited link */
+  a:visited {color: rgb(255,0,0)};  /* visited link */
+  a:hover {color: rgb(0,255,0)};   /* mouse over link */
+  a:active {color: rgb(0,0,0)};   /* selected link */ 
+}
+     
+img {
+  border:0;
+  margin:0 10px;
+}
+
+body { 
+  color: black;
+  background-color: white;
+  
+}
+
+/*size for the logo, height:width=1:2*/
+img.logo {
+  width:40em;
+  height:20em;
+}
+
+/*size for the SubStrDis-HamDis-Figure, height:width=3:4*/
+img.SubHamFig {
+  width:40em;
+  height:30em;
+}
+     
+/*size for the PosDis-Figure, height:width=3:4*/
+img.PosDis {
+  width:40em;
+  height:25em;
+}
+
+/*size for the TrendFig, height:width=3:4*/
+img.TrendFig {
+  width:60em;
+  height:45em;
+}
+
+img.other {
+  width:40em;
+  height:40em;
+}
+
+/*settings for the big table*/
+table.version-1{
+  table-layout: automatic;
+  border-collapse: separate;
+  border-spacing: 0.5em;
+  caption-side: left;
+}

@@ -1,0 +1,337 @@
+function drawSubHamFig(in_dir1,out_dir1,in_dir2,out_dir2,in_dir3,WIDTH,x_lim,HighLightNum,HamDisCutOff)
+% in_dir1 is the directory of the input files
+% out_dir1 is the directory for output figures
+% in_dir2 is the directory of the input files for position distribution
+% out_dir2 is the directory for output figures for position distribution
+% in_dir3 is the directory for sequence bias between origin and reverse complement
+% WIDTH is the width of motif
+% x_lim is the bound for axis
+% HighLightNum is the num of dots we want to highlight
+% HamDisCutOff is the threshold for TFBS to the consensus sequence
+% All directories should end with '/'
+% this function tries to plot a SubStrCount-HamDis figure and PosDis figure
+% version: March 26th, 2009
+
+% add unique sequence portion, as well file name validation
+% Lu Cheng.  April 16, 2009.
+
+% Skip mode has been added
+% Date: 14.05.2009
+
+FileNames = fuf(in_dir1);
+FileNum = length(FileNames);
+mkdir(out_dir1);
+mkdir(out_dir2);
+
+%% Initialize global variable
+global IS_SKIP;  % skip processing already existed files
+
+if isempty(IS_SKIP)
+    IS_SKIP = false(1);
+end
+
+%% draw figures
+
+
+for i = 1:FileNum
+    %[FileNames{i},WIDTH]
+    
+    filename = FileNames{i};
+    
+    % match the full barcode
+    if isempty(regexp(filename,'([0A-Z][A-Z]*)_([ACGT]+)_([0-9]+)','once','match'))
+        continue;
+    else
+        tokens = regexp(filename,'([0A-Z][A-Z]*)_([ACGT]+)_([0-9]+)','once','tokens');
+        [batch barcode cycle] = tokens{:};
+        FullBarcode = strcat(batch,'_',barcode,'_',cycle);
+    end
+    
+    % check files should be skipped
+    out_PosDisFig = strcat(out_dir2,FullBarcode,'.png');
+    out_SubHamFig = strcat(out_dir1,FullBarcode,'.png');
+    if IS_SKIP && exist(out_PosDisFig,'file')~=0 && exist(out_SubHamFig,'file')~=0
+        continue;
+    else
+        clear out_PosDisFig out_SubHamFig
+    end
+    
+    %read the header and the then the data
+    hamdis_file = strcat(in_dir1,filename);
+    posdis_file = strcat(in_dir2,FullBarcode,'.dis');
+    seqbias_file = strcat(in_dir3,FullBarcode,'.bias');
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%  read in the data  %%%%%%%%%%%%%%%%%%%%%%%%
+    % header
+    fid = fopen(hamdis_file);
+    TITLE = fgetl(fid);
+    TITLE = regexprep(TITLE,'_','\\_');
+    fclose(fid);
+
+    % data
+    mat = dlmread(hamdis_file,' ',1,0);
+    % columns
+    IsRevCom = logical(mat(:,1)');   % reverse complement or not
+    HamDis = mat(:,2)';         % Hamming Distance
+    SubStrCount = mat(:,3)';    % SubStrCount
+    SeqInd = mat(:,4)';         % Substring index
+    %%------------------------section line-------------------------------%%
+    
+    
+    %%%%%%%%%%%%%%%%  Plot SubStrCount-HamDis Figure  %%%%%%%%%%%%%%%%%%%%%
+    %indexes for sequences with HamDis lower than the cutoff
+    BindInd = HamDis < HamDisCutOff;
+    NonBindInd = ~BindInd;
+    
+    %indexes for palindrome, i.e. its reverse complementary is the same as itself
+    PalinDromeInd = (SeqInd == getRevCom(SeqInd,WIDTH));
+    
+    % produce some pseudocount
+    r = 0.3 * rand(1,length(HamDis));
+    alpha = 2 * pi * rand(1,length(HamDis));
+    psex = r .* sin(alpha);
+    psey = r .* cos(alpha);
+  
+    % add the pseudocount to HamDis and SubStrCount
+    vec_HamDis = HamDis + psex;
+    vec_SubStrCount = SubStrCount + psey;
+    
+     % highlight those dots with highest counts
+    tmp = sort(vec_SubStrCount,'descend');
+    if length(tmp) > HighLightNum
+        threshold = tmp(HighLightNum);
+    else
+        threshold = tmp(end);
+    end
+    TopInd = find(vec_SubStrCount>=threshold);
+    TopSeqName = Index2Seq(SeqInd(TopInd),WIDTH);
+    RevcomTopIndex = getRevCom(SeqInd(TopInd),WIDTH);
+    RevcomTopSeqName = Index2Seq(RevcomTopIndex,WIDTH);
+        
+    % index for binding site, reverse complementary sequence, red and 'o' dots
+    PlotInd1 = IsRevCom&BindInd&(~PalinDromeInd);
+    % index for binding site in the original sequence pool, blue and '+'
+    PlotInd2 = ~IsRevCom&BindInd&(~PalinDromeInd);
+    % index for non-biniding site, 'x' for original, 's' for revcom
+    PlotInd3 = ~IsRevCom&NonBindInd&(~PalinDromeInd);
+    PlotInd4 = IsRevCom &NonBindInd&(~PalinDromeInd);
+    % index for PalineDrome, revcom, green and '*'
+    PlotInd5 = PalinDromeInd;
+    % plot the SubStrCount-HamDis figure
+    plot(vec_HamDis(PlotInd1),vec_SubStrCount(PlotInd1),'ro',...
+        vec_HamDis(PlotInd2),vec_SubStrCount(PlotInd2),'b+',...
+        vec_HamDis(PlotInd3),vec_SubStrCount(PlotInd3),'kx',...
+        vec_HamDis(PlotInd4),vec_SubStrCount(PlotInd4),'m.',...
+        vec_HamDis(PlotInd5),vec_SubStrCount(PlotInd5),'g*','MarkerSize',3);
+    xlim(x_lim);
+    xlabel('Hamming Distance','FontSize',14);
+    ylabel('Substring count','FontSize',14);
+    title(cat(2,TITLE,'  ',num2str(length(vec_HamDis)),' dots'),'FontSize',18);
+    %%------------------------section line-------------------------------%%
+    
+    
+    
+    %%%%%%%%%%%%%%%%  Plot Top Sequences & their revcoms  %%%%%%%%%%%%%%%%%%%%%
+    % color list
+    %ColorArray = {'yellow','blue','green','red','cyan','magenta','black'};
+    ColorArray = {[0.5 0.5 0],[0 0 1],[0 0.8 0],[1 0 0],[0 0.5 0.7],[1 0 1],[0 0 0]};
+    TopSeqInfo = cell(1,length(TopInd));
+    % put sequence information in the highlighted dots
+    for j=1:length(TopInd)
+        color = ColorArray{mod(j,7)+1};
+        tmpx = vec_HamDis(TopInd(j));
+        tmpy = vec_SubStrCount(TopInd(j));
+        text(tmpx,tmpy,cat(2,'\leftarrow ',TopSeqName(j,:),' ',num2str(round(tmpy))),'horizontalAlignment', 'left','FontSize',10,'Color',color);
+        
+        TopSeqInfo{j} = cat(2,'\color[rgb]{',num2str(color),'}',TopSeqName(j,:),' ',num2str(round(tmpy)));
+        
+        revcomind = (SeqInd==RevcomTopIndex(j));
+        if(any(revcomind))
+            tmpx = vec_HamDis(revcomind);
+            tmpy = vec_SubStrCount(revcomind);
+            text(tmpx,tmpy,cat(2,num2str(round(tmpy)),' ',RevcomTopSeqName(j,:),'\rightarrow'),'horizontalAlignment', 'right','FontSize',10,'Color',color);
+        end
+    end    
+    grid on
+    %%------------------------section line-------------------------------%%
+    
+        
+    %%%%%%%%%%%%%%%%  Add text to the figure above %%%%%%%%%%%%%%%%%%%%%
+    %handle information in the position distribution file and seqbias file
+    fid = fopen(posdis_file);
+    MostSeq = fgetl(fid);    
+    MostSeqNum = str2double(fgetl(fid));
+    UniqueSeqPortion = str2double(fgetl(fid));
+    TotalSeqNum = str2double(fgetl(fid));
+    fclose(fid);
+    
+    tmpPosDis = dlmread(posdis_file,' ',4,0);
+    OrigPosDis = tmpPosDis(1,:);
+    RevComPosDis = tmpPosDis(2,:);
+    PosDis = OrigPosDis + RevComPosDis;
+    SeqBias = dlmread(seqbias_file,' ',1,0);
+    
+    if isempty(PosDis)
+        continue;
+    end
+    
+    message = cell(1,7);
+    if MostSeqNum ~= -1
+        message(1) = {cat(2,MostSeq,' ',num2str(MostSeqNum))};
+    else
+        message(1) = {'No significant sequence for this pool'};
+    end
+
+    message(2) = {cat(2,'Unique Sequence portion: ',' ',num2str(UniqueSeqPortion))};
+    message(3) = {cat(2,'Total sequence number: ',num2str(TotalSeqNum))};
+    message(4) = {cat(2,'Sequences with a bind site ',num2str(sum(PosDis)))};
+    message(5) = {cat(2,'----Portion: ',num2str(sum(PosDis)/TotalSeqNum))};
+
+    actual_dis = PosDis/(sum(PosDis)+0.01);
+    orig_dis = OrigPosDis/(sum(OrigPosDis)+0.01);
+    revcom_dis = RevComPosDis/(sum(RevComPosDis)+0.01);
+    uniform_dis = ones(size(PosDis))/length(PosDis);
+    posdis_bias = sum((actual_dis-uniform_dis).^2);
+    message(6) = {cat(2,'Position bias: ',num2str(posdis_bias))};
+    if ~isempty(SeqBias)
+        avg_seqbias = sum(abs(SeqBias(:,1)-SeqBias(:,2)))/sum(sum(SeqBias));
+        message(7) = {cat(2,'Average SeqBias: ',num2str(avg_seqbias))};
+    else
+        message(7) = {'Average SeqBias: not enough data.'};
+    end
+    
+    %identify the box position for the text
+    posx = xlim;
+    posy = ylim;
+    posx1 = posx(1) + (posx(2)-posx(1))*0.6;
+    posy1 = posy(1) + (posy(2)-posy(1))*0.85;
+    text(posx1,posy1,message,'FontSize',10);
+    posx2 = posx(1) + (posx(2)-posx(1))*0.7;
+    posy2 = posy(1) + (posy(2)-posy(1))*0.55;
+    text(posx2,posy2,TopSeqInfo,'FontSize',10,'EdgeColor','k','LineWidth',2);
+    
+    % output the first figure: SubStrCount-HamDis
+    out_SubHamFig = strcat(out_dir1,FullBarcode,'.png');
+    saveas(gcf, out_SubHamFig, 'png');
+    %%------------------------section line-------------------------------%%    
+    
+    %%%%%%%%%%%%%%%%  Plot Position Distribution Figure %%%%%%%%%%%%%%%%%%%%%
+    %draw the position distribution
+%    bar([actual_dis; uniform_dis]','group');
+    bar([actual_dis; orig_dis; revcom_dis; uniform_dis]','group');
+%    pos = 1:length(actual_dis);
+%    plot(pos,actual_dis,'r-o',pos,actual_dis1,'g--o',pos,actual_dis2,'b--o',pos,uniform_dis,'k-*');
+    Y_LIM = ylim;
+    X_LIM = xlim;
+    xlim([X_LIM(1)-1,X_LIM(2)+1]);
+    ylim([Y_LIM(1),(Y_LIM(2)+0.5)]);
+    legend('Actual distribution','orig distribution','revcom distribution','Uniform distribution',2,'Location','NorthEast');
+%    legend('Actual distribution','Uniform distribution',2,'Location','NorthEast');
+    xlabel('TFBS position','FontSize',14);
+    ylabel('Frequency','FontSize',14);
+    title(cat(2,TITLE,' Position Distribution'),'FontSize',16);
+    posx = 0.3;
+    posy = Y_LIM(2)+0.;
+    text(posx,posy,message,'FontSize',12);
+    grid on;
+    
+    out_PosDisFig = strcat(out_dir2,FullBarcode,'.png');
+    saveas(gcf, out_PosDisFig, 'png');
+    %%------------------------section line-------------------------------%%
+end
+
+return
+
+%% Function-1
+%%%%%%%-----------------FUN-1-----BEGIN--------------------------------%%%%%%%%%%
+function str = Index2Seq(index, WIDTH)
+% this function will turn the index into an DNA string
+% index is a vector which are indexs of different DNA sequences, Num*1
+% or 1*Num
+% WIDTH is the length of the DNA sequence
+% str is Num*WIDTH
+
+if(size(index,2)~=1)
+    index = index';
+end
+
+Num = length(index);
+str = char(zeros(Num,WIDTH));
+
+remainder = mod(index,4);
+quotient = floor(index./4);
+str(:,WIDTH) = Index2Base(remainder);
+
+for i=1:(WIDTH-1)
+    remainder = mod(quotient,4);
+    quotient = floor(quotient/4);
+    str(:,WIDTH-i) = Index2Base(remainder);
+end
+return;
+
+function y = Index2Base(x)
+% this function turns X into bases
+y = char(x);
+y(x==0) = 'A';
+y(x==1) = 'C';
+y(x==2) = 'G';
+y(x==3) = 'T';
+return;
+%%%%%%%---------------- FUN-1 --------END------------------------------%%%%%%%%%%
+
+%% Funtion-2
+
+%%%%%%%-----------------FUN-2---------BEGIN----------------------------%%%%%%%%%%
+function index = Seq2Index(seq, WIDTH)
+% this function will turn the index of DNA strings
+% seq is a vector which are indexs of different DNA sequences, Num*WIDTH
+% WIDTH is the length of the DNA sequence
+% index is Num*1
+
+index = Base2Index(seq(:,1));
+
+for i=2:WIDTH
+    index = index*4 + Base2Index(seq(:,i));
+end
+return;
+
+function y = Base2Index(x)
+% this function turns X into bases
+y = zeros(size(x));
+y(x=='A' | x=='a') = 0;
+y(x=='C' | x=='c') = 1;
+y(x=='G' | x=='g') = 2;
+y(x=='T' | x=='t') = 3;
+return;
+%%%%%%%-----------------FUN-2--------END-------------------------------%%%%
+
+%% Funtion-3
+
+%%%%%%%-----------------FUN-3---------BEGIN----------------------------%%%%%%%%%%
+function y = getRevCom(index,WIDTH)
+% this function turn index of DNA to its reverse complementary
+% index is a Num*1 vector, WIDTH is te length of the DNA sequence
+% y is the same dimesion as index
+    tmp = mod(index,4);
+    res = 3 - tmp;
+    
+    for i=2:WIDTH
+        index = floor(index./4);
+        res = res * 4;
+        tmp = 3 - mod(index,4);
+        res = res+tmp;
+    end
+    
+    y=res;
+return;
+%%%%%%%-----------------FUN-3--------END-------------------------------%%%%
+
+
+%%%%%%%-----------------------------------------------------------------%%%%%%%%%%
+%%%%%%%-----------------------------------------------------------------%%%%%%%%%%
+
+%%%%%%%-----------------------------------------------------------------%%%%%%%%%%%%%%%%%-----------------------------------------------------------------%%%%%%%%%%
+
+%%%%%%%-----------------------------------------------------------------%%%%%%%%%%%%%%%%%-----------------------------------------------------------------%%%%%%%%%%
+
+%%%%%%%-----------------------------------------------------------------%%%%%%%%%%%%%%%%%-----------------------------------------------------------------%%%%%%%%%%

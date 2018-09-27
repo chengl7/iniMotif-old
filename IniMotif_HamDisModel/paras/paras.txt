@@ -1,0 +1,8 @@
+The following parameters are: InputData dir, OuputData dir, BackgroundDistribution File, Barcode-TfName file, min motif width, max motif width, Sequence length
+/wrk/data/lu_data/testdata/testin/
+/wrk/data/lu_data/testdata/testout
+/home/lcheng/IniMotif_HamDisModel/BackDis.txt
+/home/lcheng/IniMotif_HamDisModel/Barcode-TfName.txt
+7
+8
+14
